@@ -145,7 +145,11 @@ def generate_detections(encoder, mot_dir, output_dir, detection_dir=None):
             raise ValueError(
                 "Failed to created output directory '%s'" % output_dir)
 
-    for sequence in os.listdir(mot_dir):
+    sequence_folders = os.listdir(mot_dir)
+    for name in ['.DS_Store', 'placeholder']:
+        if name in sequence_folders:
+            sequence_folders.remove(name)
+    for sequence in sequence_folders:
         print("Processing %s" % sequence)
         sequence_dir = os.path.join(mot_dir, sequence)
 
