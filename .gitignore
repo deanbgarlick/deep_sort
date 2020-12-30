@@ -5,4 +5,4 @@ data/
 *.npy
 *.avi
 *.mp4
-*.txt
+**.txt
