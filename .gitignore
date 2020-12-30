@@ -2,7 +2,7 @@ detections/
 data/
 *.pb
 .DS_Store
-*.npy
+**.npy
 *.avi
 *.mp4
 **.txt
