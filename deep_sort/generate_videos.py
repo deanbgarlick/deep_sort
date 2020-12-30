@@ -46,11 +46,12 @@ if __name__ == "__main__":
             continue
         result_file = os.path.join(args.result_dir, sequence_txt)
         update_ms = args.update_ms
-        video_filename = os.path.join(args.output_dir, "%s.avi" % sequence)
+        video_filename = os.path.join(args.output_dir, "%s.mp4" % sequence)
 
         print("Saving %s to %s." % (sequence_txt, video_filename))
         show_results.run(
-            sequence_dir, result_file, False, None, update_ms, video_filename)
+            sequence_dir, result_file, False, None, update_ms, video_filename
+        )
 
     if not args.convert_h264:
         import sys
