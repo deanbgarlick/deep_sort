@@ -6,3 +6,4 @@ data/
 *.avi
 *.mp4
 *.txt
+.ipynb_checkpoints/
