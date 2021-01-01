@@ -15,4 +15,5 @@ COPY . .
 
 RUN pip install -r requirements.txt
 
-CMD ["jupyter", "notebook", "--ip=0.0.0.0", "--port=8888", "--allow-root"]
+#CMD ["jupyter", "notebook", "--ip=0.0.0.0", "--port=8888", "--allow-root"]
+CMD /home/microservice/entrypoint.sh

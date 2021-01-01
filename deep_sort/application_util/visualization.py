@@ -1,7 +1,7 @@
 # vim: expandtab:ts=4:sw=4
 import numpy as np
 import colorsys
-from .image_viewer import ImageViewer
+from .image_viewer import ImageViewer, ImageViewerStream
 
 
 def create_unique_color_float(tag, hue_step=0.41):
@@ -131,4 +131,22 @@ class Visualization(object):
                 *track.to_tlwh().astype(np.int), label=str(track.track_id))
             # self.viewer.gaussian(track.mean[:2], track.covariance[:2, :2],
             #                      label="%d" % track.track_id)
-#
+
+
+class StreamVisualization(Visualization):
+
+    def __init__(self, seq_info, update_ms):
+        super().__init__(seq_info, update_ms)
+
+        image_shape = seq_info["image_size"][::-1]
+        aspect_ratio = float(image_shape[1]) / image_shape[0]
+        image_shape = 1024, int(aspect_ratio * 1024)
+
+        self.viewer = ImageViewerStream(update_ms, image_shape, "Figure %s" % seq_info["sequence_name"])
+        self.viewer.thickness = 2
+        self.image_generator = None
+
+    def run(self, frame_callback, frame_idx, image, detections, results):
+        # if self.image_generator is None:
+        #     self.image_generator = self.viewer.run(lambda: self._update_fun(frame_callback))
+        return self.viewer.run(lambda: frame_callback(self, frame_idx, image, detections, results))
