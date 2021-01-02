@@ -75,15 +75,15 @@ def main():
         payload = pickle.loads(buf)
         image_id, img, predictions = payload['image_id'], payload['img'], np.array(payload['frame_results'])
 
-        print(image_id)
-
         img = from_base64(img)
         image = Image.fromarray(img)
         image = np.array(image)
 
-        predictions = predictions[predictions[:, 6] > score_threshold, :]
-
-        detections = generate_detections(encoder, image, predictions)
+        if len(predictions)>0:
+            predictions = predictions[predictions[:, 6] > score_threshold, :]
+            detections = generate_detections(encoder, image, predictions)
+        else:
+            detections = None
 
         results += run(
             image_id, image, detections,
