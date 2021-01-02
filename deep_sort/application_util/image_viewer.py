@@ -375,7 +375,8 @@ class ImageViewerStream(ImageViewer):
                 # if self._video_writer is not None:
                 #     self._video_writer.write(
                 #         cv2.resize(self.image, self._window_shape))
-            return cv2.resize(self.image, self._window_shape)
+            #return cv2.resize(self.image, self._window_shape)
+            return self.image
             # t1 = time.time()
             # remaining_time = max(1, int(self._update_ms - 1e3*(t1-t0)))
             ####cv2.imshow(self._caption, cv2.resize(self.image, self._window_shape[:2]))

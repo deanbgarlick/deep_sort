@@ -13,6 +13,7 @@ from deep_sort.application_util import visualization
 from deep_sort.deep_sort import nn_matching
 from deep_sort.deep_sort.detection import Detection
 from deep_sort.deep_sort.tracker import Tracker
+from deep_sort.deep_sort_app import create_detections
 
 import base64
 import datetime
@@ -43,7 +44,7 @@ topic_out = "object-tracking-video"
 def main():
 
     model_file = 'mars-small128.pb'
-    score_threshold = 0.65
+    score_threshold = 0
     nn_budget = None
     max_cosine_distance = 0.2
     min_confidence = 0.8
@@ -72,13 +73,15 @@ def main():
 
         buf = base64.b64decode(msg.value)
         payload = pickle.loads(buf)
-        image_id, img, predictions = payload['image_id'], payload['img'], payload['frame_results']
+        image_id, img, predictions = payload['image_id'], payload['img'], np.array(payload['frame_results'])
+
+        print(image_id)
 
         img = from_base64(img)
         image = Image.fromarray(img)
+        image = np.array(image)
 
-        predictions = predictions[0]
-        predicions = predictions[predictions[:, 6] > score_threshold, :]
+        predictions = predictions[predictions[:, 6] > score_threshold, :]
 
         detections = generate_detections(encoder, image, predictions)
 
@@ -93,6 +96,7 @@ def main():
             "max_frame_idx": np.inf,
             "update_ms": DEFAULT_UPDATE_MS,
             "image_filenames": 'video_stream',
+            "sequence_name": 'video_stream',
             "image_size": img.shape,
             "feature_dim": detections.shape[1] - 10 if detections is not None else 0,
         }
@@ -105,11 +109,13 @@ def main():
 
         visualizer = visualization.StreamVisualization(seq_info, seq_info["update_ms"])
 
+        results = np.array(results)
         img_output = visualizer.run(frame_annotation_callback, image_id, image, detections, results)
+        results = results.tolist()
 
         # Convert image to jpg
         _, buffer = cv2.imencode('.jpg', img_output)
-        producer.send(topic_out, buffer.tobytes())
+        producer.send(topic_out, base64.b64encode(buffer))
 
 
 
@@ -119,12 +125,14 @@ def frame_annotation_callback(vis, frame_idx, image, detections, results):
     vis.set_image(image.copy())
 
     if detections is not None:
+        detections = create_detections(detections, frame_idx)
         vis.draw_detections(detections)
 
-    mask = results[:, 0].astype(np.int) == frame_idx
-    track_ids = results[mask, 1].astype(np.int)
-    boxes = results[mask, 2:6]
-    vis.draw_groundtruth(track_ids, boxes)
+    if results.shape[0]>0:
+        mask = results[:, 0].astype(np.int) == frame_idx
+        track_ids = results[mask, 1].astype(np.int)
+        boxes = results[mask, 2:6]
+        vis.draw_groundtruth(track_ids, boxes)
 
 
 def _run_in_batches(f, data_dict, out, batch_size):
@@ -175,6 +183,7 @@ def extract_image_patch(image, bbox, patch_shape):
 
     # convert to top left, bottom right
     bbox[2:] += bbox[:2]
+
     bbox = bbox.astype(np.int)
 
     # clip at image boundaries
@@ -255,23 +264,25 @@ def generate_detections(encoder, image, detections_in):
 
     """
 
-    detections_out = []
 
-    frame_indices = detections_in[:, 0].astype(np.int)
-    min_frame_idx = frame_indices.astype(np.int).min()
-    max_frame_idx = frame_indices.astype(np.int).max()
-    for frame_idx in range(min_frame_idx, max_frame_idx + 1):
-        print("Frame %05d/%05d" % (frame_idx, max_frame_idx))
-        mask = frame_indices == frame_idx
-        rows = detections_in[mask]
-        #bgr_image = cv2.imread(
-        #    image_filenames[frame_idx], cv2.IMREAD_COLOR)
-        #features = encoder(bgr_image, rows[:, 2:6].copy())
-        features = encoder(image, rows[:, 2:6].copy())
-        detections_out += [np.r_[(row, feature)] for row, feature
-                            in zip(rows, features)]
-
-    return np.asarray(detections_out)
+    if len(detections_in)>0:
+        detections_out = []
+        frame_indices = detections_in[:, 0].astype(np.int)
+        min_frame_idx = frame_indices.astype(np.int).min()
+        max_frame_idx = frame_indices.astype(np.int).max()
+        for frame_idx in range(min_frame_idx, max_frame_idx + 1):
+            print("Frame %05d/%05d" % (frame_idx, max_frame_idx))
+            mask = frame_indices == frame_idx
+            rows = detections_in[mask]
+            #bgr_image = cv2.imread(
+            #    image_filenames[frame_idx], cv2.IMREAD_COLOR)
+            #features = encoder(bgr_image, rows[:, 2:6].copy())
+            features = encoder(image, rows[:, 2:6].copy())
+            detections_out += [np.r_[(row, feature)] for row, feature
+                                in zip(rows, features)]
+        return np.asarray(detections_out)
+    else:
+        return None
 
 
 def create_detections(detection_mat, frame_idx, min_height=0):
@@ -339,22 +350,25 @@ def run(frame_idx, image, detections, metric, tracker, min_confidence, nms_max_o
     """
 
     results = []
-
     # Load image and generate detections.
-    detections = create_detections(
-        detections, frame_idx, min_detection_height)
-    detections = [d for d in detections if d.confidence >= min_confidence]
+    if detections is not None:
+        detections = create_detections(
+            detections, frame_idx, min_detection_height)
+        detections = [d for d in detections if d.confidence >= min_confidence]
 
-    # Run non-maxima suppression.
-    boxes = np.array([d.tlwh for d in detections])
-    scores = np.array([d.confidence for d in detections])
-    indices = preprocessing.non_max_suppression(
-        boxes, nms_max_overlap, scores)
-    detections = [detections[i] for i in indices]
+        # Run non-maxima suppression.
+        boxes = np.array([d.tlwh for d in detections])
+        scores = np.array([d.confidence for d in detections])
+        indices = preprocessing.non_max_suppression(
+            boxes, nms_max_overlap, scores)
+        detections = [detections[i] for i in indices]
 
     # Update tracker.
     tracker.predict()
-    tracker.update(detections)
+    if detections:
+        tracker.update(detections)
+    else:
+        tracker.update(np.array([]))
     # Store results.
     for track in tracker.tracks:
         if not track.is_confirmed() or track.time_since_update > 1:
@@ -362,7 +376,6 @@ def run(frame_idx, image, detections, metric, tracker, min_confidence, nms_max_o
         bbox = track.to_tlwh()
         results.append([
             frame_idx, track.track_id, bbox[0], bbox[1], bbox[2], bbox[3]])
-
     return results
 
 
